@@ -6,8 +6,6 @@ if &compatible
   " vint: +ProhibitSetNoCompatible
 endif
 
-set termguicolors
-
 " =============================================================================
 " Vim Plug: {{{
 " =============================================================================
@@ -126,7 +124,6 @@ endif
 " Vim UI: {{{
 " =============================================================================
 
-"set cursorline
 " Show as much as possible of the last line
 set display+=lastline
 " Show unprintable characters as a hex number
@@ -155,6 +152,12 @@ endif
 if has('vertsplit')
   set splitright
 endif
+" :help xterm-true-color
+if $TERM =~# '^screen'
+  let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
+  let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
+endif
+set termguicolors
 
 augroup colorcolumn
   autocmd!
@@ -190,8 +193,6 @@ highligh Normal ctermfg=grey ctermbg=black
 hi Normal ctermbg=NONE
 
 colorscheme nightfly
-
-let g:lightline = { 'colorscheme': 'nightfly', }
 
 " }}}
 " =============================================================================
