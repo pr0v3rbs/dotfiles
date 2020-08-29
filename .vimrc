@@ -57,10 +57,20 @@ if has('gui_running')
   endif
 endif
 set autoread
-"set background=dark
+set background=dark
 set backspace=indent,eol,start
 " Use the clipboard register '*'
 set clipboard=unnamed
+if has('unnamedplus')
+  " Use X11 CLIPBOARD selection
+  set clipboard=unnamedplus
+endif
+" How keyword completion works when CTRL-P and CTRL-N are used
+" i: scan current and included files
+set complete-=i
+if has('patch-8.1.0360')
+  set diffopt+=algorithm:patience
+endif
 if has('multi_byte')
   set fileencodings=ucs-bom,utf-8,cp949,latin1
 endif
@@ -79,18 +89,45 @@ if has('extra_search')
 endif
 " Don't make a backup before overwriting a file
 set nobackup
+if exists('+fixendofline')
+  " When writing a file and this option is on, <EOL> at the end of file will be
+  " restored if missing
+  set nofixendofline
+endif
 " Override the 'ignorecase' if the search pattern contains upper case
 set smartcase
+" Don't redraw the screen while executing macros, registers and other commands
+" that have not been typed
+set lazyredraw
 " Enable list mode
 set list
 " Strings to use in 'list' mode and for the :list command
 try
-  set listchars=tab:>\ ,trail:·,extends:»,precedes:«,nbsp:+
+  set listchars=tab:→\ ,trail:·,extends:»,precedes:«,nbsp:~
 catch /^Vim\%((\a\+)\)\=:E474/
-  set listchars=tab:>\ ,trail:_,extends:>,precedes:<,nbsp:+
+  set listchars=tab:>\ ,trail:_,extends:>,precedes:<,nbsp:~
 endtry
 " The key sequence that toggles the 'paste' option
 set pastetoggle=<F2>
+if has('mksession')
+  " Changes the effect of the :mksession command
+  set sessionoptions-=buffers " hidden and unloaded buffers
+endif
+" Help to avoid all the hit-enter prompts caused by file messages and to avoid
+" some other messages
+" m: use "[+]" instead of "[Modified]"
+" r: use "[RO]" instead of "[readonly]"
+" c: don't give ins-completion-menu messages
+" S: do not show search count message when searching, e.g. "[1/5]"
+set shortmess+=m
+set shortmess+=r
+set shortmess+=c
+if has('patch-8.1.1270')
+  set shortmess-=S
+endif
+" Exclude East Asian characters from spell checking
+set spelllang-=cjk
+set spelllang+=cjk
 " Files with these suffixes get a lower priority when multiple files match a
 " wildcard
 set suffixes+=.git,.hg,.svn
@@ -99,6 +136,12 @@ set suffixes+=.dll,.exe
 set suffixes+=.swo
 set suffixes+=.DS_Store
 set suffixes+=.pyc
+" Filenames for the tag command, separated by spaces or commas
+if has('path_extra')
+  set tags-=./tags
+  set tags-=./tags;
+  set tags^=./tags;
+endif
 " Maximum number of changes that can be undone
 set undolevels=1000
 " Update swap file and trigger CursorHold after 1 second
@@ -113,11 +156,26 @@ if has('wildmenu')
 endif
 
 if has('win32')
-  " Directory names for the swap file
-  set directory=.,$TEMP
-  " Use a forward slash when expanding file names
-  set shellslash
+  if exists('+completeslash')
+    " A forward slash is used for path completion in insert mode
+    set completeslash=slash
+  else
+    " Use a forward slash when expanding file names
+    set shellslash
+  endif
 endif
+
+" C
+let g:c_comment_strings = 1
+
+" Rust
+if executable('rustfmt')
+  let g:rustfmt_autosave = 1
+endif
+
+" TeX
+let g:tex_conceal = 'abdmg'
+let g:tex_flavor = 'latex'
 
 " }}}
 " =============================================================================
