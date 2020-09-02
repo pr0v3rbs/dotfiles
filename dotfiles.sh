@@ -11,8 +11,7 @@ git clone https://github.com/bluz71/vim-nightfly-guicolors \
 git clone --depth=1 https://github.com/vim-syntastic/syntastic.git \
         ~/.vim/bundle/syntastic
 
-git clone https://github.com/vim-airline/vim-airline \
-        ~/.vim/bundle/vim-airline
+git clone https://github.com/vim-airline/vim-airline ~/.vim/bundle/vim-airline
 
 mkdir -p ~/.vim/pack/airblade/start
 git clone https://github.com/airblade/vim-gitgutter \
