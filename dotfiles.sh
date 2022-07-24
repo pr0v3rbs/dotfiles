@@ -1,3 +1,7 @@
+# requirements
+
+sudo apt install fzf curl
+
 # download
 mkdir -p ~/.vim/autoload ~/.vim/bundle && \
         curl -LSso ~/.vim/autoload/pathogen.vim https://raw.githubusercontent.com/tpope/vim-pathogen/master/autoload/pathogen.vim
