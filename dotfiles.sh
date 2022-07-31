@@ -1,6 +1,6 @@
 # requirements
 
-sudo apt install fzf curl
+sudo apt install git fzf curl vim
 
 # download
 mkdir -p ~/.vim/autoload ~/.vim/bundle && \
