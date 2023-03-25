@@ -8,6 +8,17 @@ case $- in
   *) return;;
 esac
 
+if [ -e /proc/version ] && grep -q Microsoft /proc/version; then
+  # See https://github.com/microsoft/WSL/issues/352
+  if [[ "$(umask)" = *'000' ]]; then
+    if [ -e /etc/login.defs ] && grep -q '^[[:space:]]*USERGROUPS_ENAB[[:space:]]\{1,\}yes' /etc/login.defs; then
+      umask 002
+    else
+      umask 022
+    fi
+  fi
+fi
+
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
 HISTCONTROL=ignoreboth
@@ -76,10 +87,12 @@ else
 fi
 
 if [ "$git_prompt_loaded" = "yes" ]; then
-  if [[ "$(uname)" == 'Linux' ]] || [[ "$(uname)" == 'Darwin' ]]; then
-    GIT_PS1_SHOWDIRTYSTATE=true
-    GIT_PS1_STATESEPARATOR=""
-  fi
+  case "$(uname)" in
+    Darwin | Linux)
+      GIT_PS1_SHOWDIRTYSTATE=true
+      GIT_PS1_STATESEPARATOR=""
+      ;;
+  esac
 fi
 
 if [ "$color_prompt" = yes ]; then
@@ -143,61 +156,8 @@ if ! shopt -oq posix; then
   fi
 fi
 
-function add_to_path_once() {
-  if [[ ":$PATH:" != *":$1:"* ]]; then
-    export PATH="$1:$PATH"
-  fi
-}
-
-function bundle_install() {
-  local bundler_version bundler_1_4_0
-  bundler_version=($(bundle version))
-  [ -z "${bundler_version}" ] && return
-  bundler_version=(${bundler_version[2]//./ })
-  bundler_1_4_0=(1 4 0)
-
-  local jobs_available=1
-  for i in {0..2}; do
-    if [ ${bundler_version[$i]} -gt ${bundler_1_4_0[$i]} ]; then
-      break
-    fi
-    if [ ${bundler_version[$i]} -lt ${bundler_1_4_0[$i]} ]; then
-      jobs_available=0
-      break
-    fi
-  done
-  if [ $jobs_available -eq 1 ]; then
-    local cores_num
-    if [[ "$(uname)" == 'Darwin' ]]; then
-      cores_num="$(sysctl -n hw.ncpu)"
-    else
-      cores_num="$(nproc)"
-    fi
-    bundle install --jobs=$cores_num $@
-  else
-    bundle install $@
-  fi
-}
-
-# Add /usr/local/bin to PATH for Mac OS X
-if [[ "$(uname)" == 'Darwin' ]]; then
-  add_to_path_once "/usr/local/bin:/usr/local/sbin"
-fi
-
-# Load Linuxbrew
-if [[ -d "$HOME/.linuxbrew" ]]; then
-  add_to_path_once "$HOME/.linuxbrew/bin"
-  export MANPATH="$HOME/.linuxbrew/share/man:$MANPATH"
-  export INFOPATH="$HOME/.linuxbrew/share/info:$INFOPATH"
-fi
-
 if command -v brew >/dev/null; then
   BREW_PREFIX="$(brew --prefix)"
-fi
-
-# Set PATH to include user's bin if it exists
-if [ -d "$HOME/bin" ]; then
-  add_to_path_once "$HOME/bin"
 fi
 
 # Load z
@@ -228,6 +188,7 @@ fi
 
 # Load fzf
 if [ -f ~/.fzf.bash ]; then
+  export FZF_DEFAULT_OPTS='--bind ctrl-f:page-down,ctrl-b:page-up'
   source ~/.fzf.bash
 
   # fshow - git commit browser
@@ -235,6 +196,8 @@ if [ -f ~/.fzf.bash ]; then
     git log --graph --color=always \
       --format="%C(auto)%h%d %s %C(green)%cr%C(reset)" "$@" |
     fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
+      --preview "echo {} | grep -o '[a-f0-9]\{7\}' | head -1 |
+                 xargs -I % sh -c 'git show --color=always %'" \
       --bind "ctrl-m:execute:
         (grep -o '[a-f0-9]\{7\}' | head -1 |
         xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
@@ -247,26 +210,29 @@ fi
 if [ -e /usr/local/share/chruby/chruby.sh ]; then
   source /usr/local/share/chruby/chruby.sh
   source /usr/local/share/chruby/auto.sh
+elif [ -n "$BREW_PREFIX" ]; then
+  if [ -e "$BREW_PREFIX/opt/chruby/share/chruby/chruby.sh" ]; then
+    source "$BREW_PREFIX/opt/chruby/share/chruby/chruby.sh"
+    source "$BREW_PREFIX/opt/chruby/share/chruby/auto.sh"
+  fi
 fi
 
 # Load rbenv
-if [ -e "$HOME/.rbenv" ]; then
-  export PATH="$HOME/.rbenv/bin:$PATH"
+if command -v rbenv >/dev/null || [ -e "$HOME/.rbenv" ]; then
   eval "$(rbenv init - bash)"
 fi
 
 # Load pyenv
 if command -v pyenv >/dev/null; then
-  export PYENV_ROOT="$HOME/.pyenv"
   eval "$(pyenv init - bash)"
   if command -v pyenv-virtualenv-init >/dev/null; then
     eval "$(pyenv virtualenv-init - bash)"
   fi
 elif [ -e "$HOME/.pyenv" ]; then
-  export PYENV_ROOT="$HOME/.pyenv"
-  export PATH="$HOME/.pyenv/bin:$PATH"
   eval "$(pyenv init - bash)"
-  eval "$(pyenv virtualenv-init - bash)"
+  if [ -e "$HOME/.pyenv/plugins/pyenv-virtualenv" ]; then
+    eval "$(pyenv virtualenv-init - bash)"
+  fi
 fi
 
 # Load RVM into a shell session *as a function*
@@ -275,11 +241,16 @@ if [[ -s "$HOME/.rvm/scripts/rvm" ]]; then
 
   if [[ "$(type rvm | head -n 1)" == "rvm is a shell function" ]]; then
     # Add RVM to PATH for scripting
-    PATH=$PATH:$HOME/.rvm/bin
+    case ":$PATH:" in
+      *":$HOME/.rvm/bin:"*)
+        ;;
+      *)
+        export PATH="$PATH:$HOME/.rvm/bin"
+    esac
     export rvmsudo_secure_path=1
 
     # Use right RVM gemset when using tmux
-    if [[ "$TMUX" != "" ]]; then
+    if [ -n "$TMUX" ]; then
       rvm use default
       pushd -n ..
       popd -n
@@ -287,127 +258,31 @@ if [[ -s "$HOME/.rvm/scripts/rvm" ]]; then
   fi
 fi
 
-# Set GOPATH for Go
-if command -v go >/dev/null; then
-  [ -d "$HOME/.go" ] || mkdir "$HOME/.go"
-  export GOPATH="$HOME/.go"
-  export PATH="$PATH:$GOPATH/bin"
-fi
-
-# Check if reboot is required for Ubuntu
-if [ -f /usr/lib/update-notifier/update-motd-reboot-required ]; then
-  function reboot-required() {
-    /usr/lib/update-notifier/update-motd-reboot-required
-  }
-fi
-
 # Enable keychain
 if command -v keychain >/dev/null; then
-  if [ -f "$HOME/.ssh/id_rsa" ]; then
-    eval `keychain --eval --quiet --agents ssh id_rsa`
-  elif [ -f "$HOME/.ssh/id_ed25519" ]; then
-    eval `keychain --eval --quiet --agents ssh id_ed25519`
+  KEY=''
+  if [ -f "$HOME/.ssh/id_ed25519" ]; then
+    KEY='id_ed25519'
+  elif [ -f "$HOME/.ssh/id_rsa" ]; then
+    KEY='id_rsa'
   fi
+  if [ -n "$KEY" ]; then
+    if [ "$(uname)" = 'Darwin' ]; then
+      eval `keychain --eval --quiet --agents ssh --inherit any $KEY`
+    else
+      eval `keychain --eval --quiet --agents ssh $KEY`
+    fi
+  fi
+  unset KEY
 fi
 
 # Unset local functions and variables
 unset BREW_PREFIX
-unset -f add_to_path_once
 
 # Define aliases
-# Enable color support
-if ls --color -d . >/dev/null 2>&1; then
-  alias ls='ls --color=auto'
-else
-  alias ls='ls -G'
+if [ -f "$HOME/.aliases" ]; then
+  source "$HOME/.aliases"
 fi
-alias grep='grep --color=auto'
-alias fgrep='fgrep --color=auto'
-alias egrep='egrep --color=auto'
-
-# Some more basic aliases
-# alias ll='ls -alF'
-# alias la='ls -A'
-# alias l='ls -CF'
-alias ll='ls -lh'
-alias la='ls -lAh'
-alias l='ls -lah'
-alias md='mkdir -p'
-alias rd='rmdir'
-alias cd..='cd ..'
-alias cd...='cd ../..'
-alias cd....='cd ../../..'
-alias cd.....='cd ../../../..'
-alias cd......='cd ../../../../..'
-alias ...='cd ../..'
-alias ....='cd ../../..'
-alias .....='cd ../../../..'
-alias ......='cd ../../../../..'
-
-# Bundler
-alias be='bundle exec'
-alias bi='bundle_install'
-alias bu='bundle update'
-
-# Git
-alias g='git'
-alias ga='git add'
-alias gapa='git add --patch'
-alias gb='git branch'
-alias gc='git commit -v'
-alias gc!='git commit -v --amend'
-alias gca='git commit -v -a'
-alias gca!='git commit -v -a --amend'
-alias gcb='git checkout -b'
-alias gcd='git checkout develop'
-alias gcm='git checkout master'
-alias gco='git checkout'
-alias gcp='git cherry-pick'
-alias gd='git diff'
-alias gdca='git diff --cached'
-alias gf='git fetch'
-alias gfl='git-flow'
-alias ggpush='git push origin HEAD'
-alias gl='git pull'
-alias glg='git log --decorate --pretty=format:"%C(auto,yellow)%h %C(auto,blue)%ar %C(auto,green)%an%C(auto,reset) %s%C(auto)%d"'
-alias glgg='glg --graph'
-alias glga='glg --graph --all'
-alias gp='git push'
-alias gr='git remote'
-alias gra='git remote add'
-alias grb='git rebase'
-alias grba='git rebase --abort'
-alias grbc='git rebase --continue'
-alias grbi='git rebase -i'
-alias grup='git remote update'
-alias gst='git status'
-alias gsta='git -c commit.gpgsign=false stash'
-alias gstd='git stash drop'
-alias gstp='git stash pop'
-
-# Vim
-if command -v vim >/dev/null; then
-  alias v='vim'
-  alias vi='vim'
-elif command -v vi >/dev/null; then
-  alias v='vi'
-fi
-if command -v nvim >/dev/null; then
-  alias nv='nvim'
-fi
-
-# http://boredzo.org/blog/archives/2016-08-15/colorized-man-pages-understood-and-customized
-function man() {
-  env \
-    LESS_TERMCAP_mb=$'\e[1;31m' \
-    LESS_TERMCAP_md=$'\e[1;31m' \
-    LESS_TERMCAP_me=$'\e[0m' \
-    LESS_TERMCAP_se=$'\e[0m' \
-    LESS_TERMCAP_so=$'\e[1;44;33m' \
-    LESS_TERMCAP_ue=$'\e[0m' \
-    LESS_TERMCAP_us=$'\e[1;32m' \
-    man "$@"
-}
 
 # Source local bashrc
 if [ -f "$HOME/.bashrc.local" ]; then

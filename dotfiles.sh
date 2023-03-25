@@ -1,6 +1,6 @@
 # requirements
 
-sudo apt install git curl vim
+sudo apt install tmux git curl vim
 
 # download
 mkdir -p ~/.vim/autoload ~/.vim/bundle && \
