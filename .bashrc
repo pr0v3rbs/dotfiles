@@ -19,6 +19,8 @@ if [ -e /proc/version ] && grep -q Microsoft /proc/version; then
   fi
 fi
 
+set -o ignoreeof
+
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
 HISTCONTROL=ignoreboth
