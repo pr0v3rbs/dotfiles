@@ -1,7 +1,7 @@
 # dotfiles
 dotfiles
 
-https://github.com/vim-airline/vim-airline
+Based on https://github.com/yous/dotfiles
 
 ## List of items
 
